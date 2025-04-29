@@ -1,10 +1,15 @@
 import "./style.css";
-import sourceShader from "./source-shader.wgsl";
-import diffusionShader from "./diffusion-shader.wgsl";
-import advectionShader from "./advection-shader.wgsl";
-import boundaryShader from "./boundary-shader.wgsl";
-import vertexOverlayShader from "./vertex-overlay.wgsl";
-import renderShader from "./renderer.wgsl";
+import { initGPU } from "./gpuContext";
+import sourceShdr from "./compute_shaders/sources.wgsl";
+import diffuseVelShdr from "./compute_shaders/diffuse-velocity.wgsl";
+import advectVelShdr from "./compute_shaders/advect-velocity.wgsl";
+import projectVelShdr from "./compute_shaders/project-velocity.wgsl";
+import vectorBoundsShdr from "./compute_shaders/vector-boundaries.wgsl";
+import diffuseDensShdr from "./compute_shaders/diffuse-density.wgsl";
+import advectDensShdr from "./compute_shaders/advect-density.wgsl";
+import scalarBoundsShdr from "./compute_shaders/scalar-boundaries.wgsl";
+import vtxOverlayShdr from "./vertex_shaders/vertex-overlay.wgsl";
+import renderShdr from "./fragment_shaders/renderer.wgsl";
 //@ts-ignore
 import Bresenham from "bresenham";
 
@@ -17,50 +22,12 @@ canvas.height = gridY;
 canvas.style.height = "90%";
 canvas.style.border = "1px solid green";
 
-if (!navigator.gpu) {
-  throw new Error("WebGPU not supported on this browser.");
-}
-
-const adapter = await navigator.gpu.requestAdapter();
-if (!adapter) {
-  throw new Error("No appropriate GPUAdapter found.");
-}
-
-const device = await adapter.requestDevice();
-
-const context = canvas.getContext("webgpu");
-if (!context) {
-  throw new Error(
-    "Failed to resolve context from: 'canvas.getContext('webgpu');'."
-  );
-}
-const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-context.configure({
-  device: device,
-  format: canvasFormat,
-});
-
-const renderPipeline = device.createRenderPipeline({
-  layout: "auto",
-  vertex: {
-    module: device.createShaderModule({ code: vertexOverlayShader }), // from vs_main
-    entryPoint: "vs_main",
-  },
-  fragment: {
-    module: device.createShaderModule({ code: renderShader }), // from your grayscale fragment shader
-    entryPoint: "main",
-    targets: [
-      {
-        format: canvasFormat,
-      },
-    ],
-  },
-});
+const { device, context, canvasFormat } = await initGPU(canvas);
 
 //setup initial state
 const gridSize = new Uint32Array([gridX, gridY]);
-const velocities = new Float32Array(gridX * gridY * 2);
-const densities = new Float32Array(gridX * gridY);
+const vectorsGrid = new Float32Array(gridX * gridY * 2);
+const scalarsGrid = new Float32Array(gridX * gridY);
 const sources = new Uint32Array(30 * 5);
 const sourceCount = new Uint32Array([0]);
 
@@ -75,27 +42,44 @@ const sourceCountBuffer = device.createBuffer({
 const velocitiesBuffers = [
   device.createBuffer({
     label: "Velocities A",
-    size: velocities.byteLength,
+    size: vectorsGrid.byteLength,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   }),
   device.createBuffer({
     label: "Velocities B",
-    size: velocities.byteLength,
+    size: vectorsGrid.byteLength,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   }),
 ];
 const densitiesBuffers = [
   device.createBuffer({
     label: "Densities A",
-    size: densities.byteLength,
+    size: scalarsGrid.byteLength,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   }),
   device.createBuffer({
     label: "Densities B",
-    size: densities.byteLength,
+    size: scalarsGrid.byteLength,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   }),
 ];
+const pressuresBuffers = [
+  device.createBuffer({
+    label: "Pressures A",
+    size: scalarsGrid.byteLength,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+  }),
+  device.createBuffer({
+    label: "Pressures B",
+    size: scalarsGrid.byteLength,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+  }),
+];
+const divergenceBuffer = device.createBuffer({
+  label: "Divergence",
+  size: scalarsGrid.byteLength,
+  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+});
 const sourcesBuffer = device.createBuffer({
   label: "Sources",
   size: sources.byteLength,
@@ -104,31 +88,50 @@ const sourcesBuffer = device.createBuffer({
 
 device.queue.writeBuffer(gridSizeBuffer, 0, gridSize);
 device.queue.writeBuffer(sourceCountBuffer, 0, sourceCount);
-device.queue.writeBuffer(velocitiesBuffers[0], 0, velocities);
-device.queue.writeBuffer(densitiesBuffers[0], 0, densities);
-device.queue.writeBuffer(velocitiesBuffers[1], 0, velocities);
-device.queue.writeBuffer(densitiesBuffers[1], 0, densities);
+device.queue.writeBuffer(velocitiesBuffers[0], 0, vectorsGrid);
+device.queue.writeBuffer(densitiesBuffers[0], 0, scalarsGrid);
+device.queue.writeBuffer(velocitiesBuffers[1], 0, vectorsGrid);
+device.queue.writeBuffer(densitiesBuffers[1], 0, scalarsGrid);
 device.queue.writeBuffer(sourcesBuffer, 0, sources);
+device.queue.writeBuffer(pressuresBuffers[0], 0, scalarsGrid);
+device.queue.writeBuffer(pressuresBuffers[1], 0, scalarsGrid);
+device.queue.writeBuffer(divergenceBuffer, 0, scalarsGrid);
 
-const sourceShaderModule = device.createShaderModule({
-  label: "sourceShader",
-  code: sourceShader,
+const sourceShdrMdl = device.createShaderModule({
+  label: "sources shader",
+  code: sourceShdr,
 });
-const diffusionShaderModule = device.createShaderModule({
-  label: "diffusionShader",
-  code: diffusionShader,
+const diffuseVelShdrMdl = device.createShaderModule({
+  label: "diffuse velocity shader",
+  code: diffuseVelShdr,
 });
-const advectionShaderModule = device.createShaderModule({
-  label: "advectionShader",
-  code: advectionShader,
+const advectVelShdrMdl = device.createShaderModule({
+  label: "advect velocity shader",
+  code: advectVelShdr,
 });
-const boundaryShaderModule = device.createShaderModule({
-  label: "boundaryShader",
-  code: boundaryShader,
+const projectVelShdrMdl = device.createShaderModule({
+  label: "project velocity shader",
+  code: projectVelShdr,
+});
+const velBndsShdrMdl = device.createShaderModule({
+  label: "vector boundaries shader",
+  code: vectorBoundsShdr,
+});
+const diffuseDensShdrMdl = device.createShaderModule({
+  label: "diffuse density shader",
+  code: diffuseDensShdr,
+});
+const advectDensShdrMdl = device.createShaderModule({
+  label: "advect density shader",
+  code: advectDensShdr,
+});
+const densBndsShdrMdl = device.createShaderModule({
+  label: "density boundaries shader",
+  code: scalarBoundsShdr,
 });
 
 const sourceBindGroupLayout = device.createBindGroupLayout({
-  label: "sourceBindGroupLayout",
+  label: "source bind group layout",
   entries: [
     {
       binding: 0,
@@ -168,8 +171,33 @@ const sourceBindGroupLayout = device.createBindGroupLayout({
   ],
 });
 
-const bindGroupLayout = device.createBindGroupLayout({
-  label: "mainBindGroupLayout",
+const inOutBindGroupLayout = device.createBindGroupLayout({
+  label: "velocity bind group layout",
+  entries: [
+    {
+      binding: 0,
+      visibility: GPUShaderStage.COMPUTE,
+      buffer: {},
+    },
+    {
+      binding: 1,
+      visibility: GPUShaderStage.COMPUTE,
+      buffer: {
+        type: "read-only-storage",
+      },
+    },
+    {
+      binding: 2,
+      visibility: GPUShaderStage.COMPUTE,
+      buffer: {
+        type: "storage",
+      },
+    },
+  ],
+});
+
+const inInOutBindGroupLayout = device.createBindGroupLayout({
+  label: "velocity bind group layout",
   entries: [
     {
       binding: 0,
@@ -197,14 +225,24 @@ const bindGroupLayout = device.createBindGroupLayout({
         type: "storage",
       },
     },
-    {
-      binding: 4,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "storage",
-      },
-    },
   ],
+});
+
+const renderPipeline = device.createRenderPipeline({
+  layout: "auto",
+  vertex: {
+    module: device.createShaderModule({ code: vtxOverlayShdr }), // from vs_main
+    entryPoint: "vs_main",
+  },
+  fragment: {
+    module: device.createShaderModule({ code: renderShdr }), // from your grayscale fragment shader
+    entryPoint: "main",
+    targets: [
+      {
+        format: canvasFormat,
+      },
+    ],
+  },
 });
 
 const sourceBindGroup = device.createBindGroup({
@@ -244,10 +282,10 @@ const sourceBindGroup = device.createBindGroup({
   ],
 });
 
-const bindGroups = [
+const velocityBindGroups = [
   device.createBindGroup({
     label: "bind group A",
-    layout: bindGroupLayout,
+    layout: inOutBindGroupLayout,
     entries: [
       {
         binding: 0,
@@ -264,26 +302,14 @@ const bindGroups = [
       {
         binding: 2,
         resource: {
-          buffer: densitiesBuffers[0],
-        },
-      },
-      {
-        binding: 3,
-        resource: {
           buffer: velocitiesBuffers[1],
-        },
-      },
-      {
-        binding: 4,
-        resource: {
-          buffer: densitiesBuffers[1],
         },
       },
     ],
   }),
   device.createBindGroup({
     label: "bind group B",
-    layout: bindGroupLayout,
+    layout: inOutBindGroupLayout,
     entries: [
       {
         binding: 0,
@@ -300,24 +326,68 @@ const bindGroups = [
       {
         binding: 2,
         resource: {
-          buffer: densitiesBuffers[1],
-        },
-      },
-      {
-        binding: 3,
-        resource: {
           buffer: velocitiesBuffers[0],
-        },
-      },
-      {
-        binding: 4,
-        resource: {
-          buffer: densitiesBuffers[0],
         },
       },
     ],
   }),
 ];
+
+const diffuseDensitiesBindGroup = device.createBindGroup({
+  label: "diffuse density bind group",
+  layout: inOutBindGroupLayout,
+  entries: [
+    {
+      binding: 0,
+      resource: {
+        buffer: gridSizeBuffer,
+      },
+    },
+    {
+      binding: 1,
+      resource: {
+        buffer: densitiesBuffers[0],
+      },
+    },
+    {
+      binding: 2,
+      resource: {
+        buffer: densitiesBuffers[1],
+      },
+    },
+  ],
+});
+
+const advectDensitiesBindGroup = device.createBindGroup({
+  label: "advect density bind group",
+  layout: inInOutBindGroupLayout,
+  entries: [
+    {
+      binding: 0,
+      resource: {
+        buffer: gridSizeBuffer,
+      },
+    },
+    {
+      binding: 1,
+      resource: {
+        buffer: velocitiesBuffers[0],
+      },
+    },
+    {
+      binding: 2,
+      resource: {
+        buffer: densitiesBuffers[1],
+      },
+    },
+    {
+      binding: 3,
+      resource: {
+        buffer: densitiesBuffers[0],
+      },
+    },
+  ],
+});
 
 const renderBindGroup = device.createBindGroup({
   layout: renderPipeline.getBindGroupLayout(0),
@@ -340,37 +410,65 @@ const sourcePipeline = device.createComputePipeline({
     bindGroupLayouts: [sourceBindGroupLayout],
   }),
   compute: {
-    module: sourceShaderModule,
+    module: sourceShdrMdl,
     entryPoint: "computeMain",
   },
 });
-const diffusionPipeline = device.createComputePipeline({
+
+const diffuseVelocityPipeline = device.createComputePipeline({
   layout: device.createPipelineLayout({
-    bindGroupLayouts: [bindGroupLayout],
+    bindGroupLayouts: [inOutBindGroupLayout],
   }),
   compute: {
-    module: diffusionShaderModule,
+    module: diffuseVelShdrMdl,
     entryPoint: "computeMain",
   },
 });
-const advectionPipeline = device.createComputePipeline({
+const advectVelocityPipeline = device.createComputePipeline({
   layout: device.createPipelineLayout({
-    bindGroupLayouts: [bindGroupLayout],
+    bindGroupLayouts: [inOutBindGroupLayout],
   }),
   compute: {
-    module: advectionShaderModule,
+    module: advectVelShdrMdl,
     entryPoint: "computeMain",
   },
 });
-const boundaryPipeline = device.createComputePipeline({
+const diffuseDensityPipeline = device.createComputePipeline({
   layout: device.createPipelineLayout({
-    bindGroupLayouts: [bindGroupLayout],
+    bindGroupLayouts: [inOutBindGroupLayout],
   }),
   compute: {
-    module: boundaryShaderModule,
+    module: diffuseDensShdrMdl,
     entryPoint: "computeMain",
   },
 });
+const advectDensityPipeline = device.createComputePipeline({
+  layout: device.createPipelineLayout({
+    bindGroupLayouts: [inInOutBindGroupLayout],
+  }),
+  compute: {
+    module: advectDensShdrMdl,
+    entryPoint: "computeMain",
+  },
+});
+// const densityBoundaryPipeline = device.createComputePipeline({
+//   layout: device.createPipelineLayout({
+//     bindGroupLayouts: [velocityBindGroupLayout],
+//   }),
+//   compute: {
+//     module: densBndsShdrMdl,
+//     entryPoint: "computeMain",
+//   },
+// });
+// const velocityBoundaryPipeline = device.createComputePipeline({
+//   layout: device.createPipelineLayout({
+//     bindGroupLayouts: [velocityBindGroupLayout],
+//   }),
+//   compute: {
+//     module: velBndsShdrMdl,
+//     entryPoint: "computeMain",
+//   },
+// });
 
 let lastPointer = { x: -1, y: -1 };
 let currentPointer = { x: -1, y: -1 };
@@ -398,8 +496,6 @@ canvas.addEventListener("pointermove", (e) => {
 let pingPongState = true;
 const simulationLoop = () => {
   const encoder = device.createCommandEncoder();
-  const pass = encoder.beginComputePass();
-
   if (lastPointer.x > 0) {
     const cellWidth = canvas.clientWidth / gridX;
     const cellHeight = canvas.clientHeight / gridY;
@@ -430,21 +526,32 @@ const simulationLoop = () => {
     }
     device.queue.writeBuffer(sourceCountBuffer, 0, sourceCount);
     device.queue.writeBuffer(sourcesBuffer, 0, sources);
-    pass.setPipeline(sourcePipeline);
-    pass.setBindGroup(0, sourceBindGroup);
-    pass.dispatchWorkgroups(Math.ceil(cells.length / 256));
+    const sourcePass = encoder.beginComputePass();
+    sourcePass.setPipeline(sourcePipeline);
+    sourcePass.setBindGroup(0, sourceBindGroup);
+    sourcePass.dispatchWorkgroups(Math.ceil(cells.length / 256));
+    sourcePass.end();
   }
-  pass.setPipeline(diffusionPipeline);
-  pass.setBindGroup(0, bindGroups[0]);
+  let pass = encoder.beginComputePass();
+  pass.setPipeline(diffuseVelocityPipeline);
+  pass.setBindGroup(0, velocityBindGroups[0]);
   pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
+  pass.end();
   //pingPongState = !pingPongState;
-  pass.setPipeline(advectionPipeline);
-  pass.setBindGroup(0, bindGroups[1]);
+  pass = encoder.beginComputePass();
+  pass.setPipeline(advectVelocityPipeline);
+  pass.setBindGroup(0, velocityBindGroups[1]);
   pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  //pingPongState = !pingPongState;
-  // pass.setPipeline(boundaryPipeline);
-  // pass.setBindGroup(0, bindGroups[pingPongState ? 0 : 1]);
-  // pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
+  pass.end();
+  pass = encoder.beginComputePass();
+  pass.setPipeline(diffuseDensityPipeline);
+  pass.setBindGroup(0, diffuseDensitiesBindGroup);
+  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
+  pass.end();
+  pass = encoder.beginComputePass();
+  pass.setPipeline(advectDensityPipeline);
+  pass.setBindGroup(0, advectDensitiesBindGroup);
+  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
   pass.end();
 
   const renderPass = encoder.beginRenderPass({
