@@ -15,6 +15,7 @@ var<storage, read> densities: array<f32>;
 
   // Compute 1D index into array (row-major order)
   let index = coord.y * grid_size.x + coord.x;
+  //let gray = 100000 * (densities[index] + 0.000002);
   let gray = densities[index];
 
   // Output grayscale as RGB (optional gamma correction could go here)
