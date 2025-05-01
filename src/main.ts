@@ -15,8 +15,8 @@ import renderShdr from "./fragment_shaders/renderer.wgsl";
 //@ts-ignore
 import Bresenham from "bresenham";
 
-const gridX = 500;
-const gridY = 500;
+const gridX = 300;
+const gridY = 300;
 
 const canvas = document.getElementById("simulationCanvas") as HTMLCanvasElement;
 canvas.width = gridX;
