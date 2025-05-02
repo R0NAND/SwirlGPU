@@ -1,19 +1,26 @@
 import "./style.css";
 import { initGPU } from "./gpuContext";
-import sourceShdr from "./compute_shaders/sources.wgsl";
-import diffuseVelShdr from "./compute_shaders/diffuse-velocity.wgsl";
-import advectVelShdr from "./compute_shaders/advect-velocity.wgsl";
-import vectorBoundsShdr from "./compute_shaders/vector-boundaries.wgsl";
-import diffuseDensShdr from "./compute_shaders/diffuse-density.wgsl";
-import advectDensShdr from "./compute_shaders/advect-density.wgsl";
-import scalarBoundsShdr from "./compute_shaders/scalar-boundaries.wgsl";
-import calcDivergenceShdr from "./compute_shaders/calc-divergence.wgsl";
-import solvePressureShdr from "./compute_shaders/solve-pressure.wgsl";
-import projectVelocityShdr from "./compute_shaders/project-velocity.wgsl";
-import vtxOverlayShdr from "./vertex_shaders/vertex-overlay.wgsl";
-import renderShdr from "./fragment_shaders/renderer.wgsl";
+import { createAdvectDensityPipeline } from "./pipelines/advect-density";
+import { createAdvectVelocityPipeline } from "./pipelines/advect-velocity";
+import { createDiffuseDensityPipeline } from "./pipelines/diffuse-density";
+import { createDiffuseVelocityPipeline } from "./pipelines/diffuse-velocity";
+import { createProjectVelocityPipeline } from "./pipelines/project-velocity";
+import { createScalarBoundsPipeline } from "./pipelines/scalar-bounds";
+import { createVectorBoundsPipeline } from "./pipelines/vector-bounds";
+import { createSourcesPipeline } from "./pipelines/sources";
+import { createRenderPipeline } from "./pipelines/render";
+import { createCalcDivergenceBindGroup } from "./bind-groups/calc-divergence-group";
+import { createInInOutBindGroup } from "./bind-groups/in-in-out-group";
+import { createInOutBindGroup } from "./bind-groups/in-out-group";
+import { createProjectVelocityBindGroup } from "./bind-groups/project-velocity-group";
+import { createScalarBoundsBindGroup } from "./bind-groups/scalar-bounds-group";
+import { createSolvePressureBindGroup } from "./bind-groups/solve-pressure-group";
+import { createSourcesBindGroup } from "./bind-groups/sources-group";
+import { createVectorBoundsBindGroup } from "./bind-groups/vector-bounds-group";
 //@ts-ignore
 import Bresenham from "bresenham";
+import { createCalcDivergencePipeline } from "./pipelines/calc-divergence";
+import { createSolvePressurePipeline } from "./pipelines/solve-pressure";
 
 const gridX = 300;
 const gridY = 300;
@@ -99,767 +106,115 @@ device.queue.writeBuffer(pressuresBuffers[0], 0, scalarsGrid);
 device.queue.writeBuffer(pressuresBuffers[1], 0, scalarsGrid);
 device.queue.writeBuffer(divergenceBuffer, 0, scalarsGrid);
 
-const sourceShdrMdl = device.createShaderModule({
-  label: "sources shader",
-  code: sourceShdr,
-});
-const diffuseVelShdrMdl = device.createShaderModule({
-  label: "diffuse velocity shader",
-  code: diffuseVelShdr,
-});
-const advectVelShdrMdl = device.createShaderModule({
-  label: "advect velocity shader",
-  code: advectVelShdr,
-});
-const calcDivergenceShdrMdl = device.createShaderModule({
-  label: "calc divergence shader",
-  code: calcDivergenceShdr,
-});
-const solvePressureShdrMdl = device.createShaderModule({
-  label: "solve pressure shader",
-  code: solvePressureShdr,
-});
-const projectVelShdrMdl = device.createShaderModule({
-  label: "project velocity shader",
-  code: projectVelocityShdr,
-});
-const vecBndsShdrMdl = device.createShaderModule({
-  label: "vector boundaries shader",
-  code: vectorBoundsShdr,
-});
-const diffuseDensShdrMdl = device.createShaderModule({
-  label: "diffuse density shader",
-  code: diffuseDensShdr,
-});
-const advectDensShdrMdl = device.createShaderModule({
-  label: "advect density shader",
-  code: advectDensShdr,
-});
-const scalarBndsShdrMdl = device.createShaderModule({
-  label: "density boundaries shader",
-  code: scalarBoundsShdr,
-});
+const renderPipeline = createRenderPipeline(device, canvasFormat);
 
-const sourceBindGroupLayout = device.createBindGroupLayout({
-  label: "source bind group layout",
-  entries: [
-    {
-      binding: 0,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "uniform",
-      },
-    },
-    {
-      binding: 1,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "uniform",
-      },
-    },
-    {
-      binding: 2,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "read-only-storage",
-      },
-    },
-    {
-      binding: 3,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "storage",
-      },
-    },
-    {
-      binding: 4,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "storage",
-      },
-    },
-  ],
-});
-
-const inOutBindGroupLayout = device.createBindGroupLayout({
-  label: "velocity bind group layout",
-  entries: [
-    {
-      binding: 0,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {},
-    },
-    {
-      binding: 1,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "read-only-storage",
-      },
-    },
-    {
-      binding: 2,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "storage",
-      },
-    },
-  ],
-});
-
-const inInOutBindGroupLayout = device.createBindGroupLayout({
-  label: "velocity bind group layout",
-  entries: [
-    {
-      binding: 0,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {},
-    },
-    {
-      binding: 1,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "read-only-storage",
-      },
-    },
-    {
-      binding: 2,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "read-only-storage",
-      },
-    },
-    {
-      binding: 3,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "storage",
-      },
-    },
-  ],
-});
-
-const scalarBndsBindGroupLayout = device.createBindGroupLayout({
-  label: "scalar boundaries bind group layout",
-  entries: [
-    {
-      // grid_size
-      binding: 0,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "uniform",
-      },
-    },
-    {
-      // scalars
-      binding: 1,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "storage",
-      },
-    },
-  ],
-});
-
-const vectorBndsBindGroupLayout = device.createBindGroupLayout({
-  label: "vector boundaries bind group layout",
-  entries: [
-    {
-      // grid_size
-      binding: 0,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "uniform",
-      },
-    },
-    {
-      // vectors
-      binding: 1,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "storage",
-      },
-    },
-  ],
-});
-
-const divergencesBindGroupLayout = device.createBindGroupLayout({
-  label: "divergence bind group layout",
-  entries: [
-    {
-      // grid_size
-      binding: 0,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "uniform",
-      },
-    },
-    {
-      // velocities
-      binding: 1,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "read-only-storage",
-      },
-    },
-    {
-      // divergences
-      binding: 2,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "storage",
-      },
-    },
-    {
-      // pressures
-      binding: 3,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "storage",
-      },
-    },
-  ],
-});
-
-const solvePressureBindGroupLayout = device.createBindGroupLayout({
-  label: "solve pressure bind group layout",
-  entries: [
-    {
-      //grid_size
-      binding: 0,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "uniform",
-      },
-    },
-    {
-      // divergences
-      binding: 1,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "read-only-storage",
-      },
-    },
-    {
-      // pressures in
-      binding: 2,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "read-only-storage",
-      },
-    },
-    {
-      // pressures out
-      binding: 3,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "storage",
-      },
-    },
-  ],
-});
-
-const projectVelocitiesBindGroupLayout = device.createBindGroupLayout({
-  label: "project velocity bind group layout",
-  entries: [
-    {
-      //grid_size
-      binding: 0,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "uniform",
-      },
-    },
-    {
-      // pressures
-      binding: 1,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "read-only-storage",
-      },
-    },
-    {
-      // velocities
-      binding: 2,
-      visibility: GPUShaderStage.COMPUTE,
-      buffer: {
-        type: "storage",
-      },
-    },
-  ],
-});
-
-const renderPipeline = device.createRenderPipeline({
-  layout: "auto",
-  vertex: {
-    module: device.createShaderModule({ code: vtxOverlayShdr }), // from vs_main
-    entryPoint: "vs_main",
-  },
-  fragment: {
-    module: device.createShaderModule({ code: renderShdr }), // from your grayscale fragment shader
-    entryPoint: "main",
-    targets: [
-      {
-        format: canvasFormat,
-      },
-    ],
-  },
-});
-
-const sourceBindGroup = device.createBindGroup({
-  label: "sourceBindGroup",
-  layout: sourceBindGroupLayout,
-  entries: [
-    {
-      binding: 0,
-      resource: {
-        buffer: gridSizeBuffer,
-      },
-    },
-    {
-      binding: 1,
-      resource: {
-        buffer: sourceCountBuffer,
-      },
-    },
-    {
-      binding: 2,
-      resource: {
-        buffer: sourcesBuffer,
-      },
-    },
-    {
-      binding: 3,
-      resource: {
-        buffer: velocitiesBuffers[0],
-      },
-    },
-    {
-      binding: 4,
-      resource: {
-        buffer: densitiesBuffers[0],
-      },
-    },
-  ],
-});
+const sourceBindGroup = createSourcesBindGroup(
+  device,
+  gridSizeBuffer,
+  sourceCountBuffer,
+  sourcesBuffer,
+  velocitiesBuffers[0],
+  densitiesBuffers[0]
+);
 
 const velocityBindGroups = [
-  device.createBindGroup({
-    label: "bind group A",
-    layout: inOutBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: velocitiesBuffers[0],
-        },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: velocitiesBuffers[1],
-        },
-      },
-    ],
-  }),
-  device.createBindGroup({
-    label: "bind group B",
-    layout: inOutBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: velocitiesBuffers[1],
-        },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: velocitiesBuffers[0],
-        },
-      },
-    ],
-  }),
+  createInOutBindGroup(
+    device,
+    gridSizeBuffer,
+    velocitiesBuffers[0],
+    velocitiesBuffers[1]
+  ),
+  createInOutBindGroup(
+    device,
+    gridSizeBuffer,
+    velocitiesBuffers[1],
+    velocitiesBuffers[0]
+  ),
 ];
 
 const setVelocityBndsBindGroups = [
-  device.createBindGroup({
-    label: "set velocity boundaries bind group A",
-    layout: vectorBndsBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: velocitiesBuffers[0],
-        },
-      },
-    ],
-  }),
-  device.createBindGroup({
-    label: "set velocity boundaries bind group B",
-    layout: vectorBndsBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: velocitiesBuffers[1],
-        },
-      },
-    ],
-  }),
+  createVectorBoundsBindGroup(device, gridSizeBuffer, velocitiesBuffers[0]),
+  createVectorBoundsBindGroup(device, gridSizeBuffer, velocitiesBuffers[1]),
 ];
 
 const setDensityBndsBindGroups = [
-  device.createBindGroup({
-    label: "set density boundaries bind group A",
-    layout: scalarBndsBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: densitiesBuffers[0],
-        },
-      },
-    ],
-  }),
-  device.createBindGroup({
-    label: "set velocity boundaries bind group B",
-    layout: vectorBndsBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: densitiesBuffers[1],
-        },
-      },
-    ],
-  }),
+  createScalarBoundsBindGroup(device, gridSizeBuffer, densitiesBuffers[0]),
+  createScalarBoundsBindGroup(device, gridSizeBuffer, densitiesBuffers[1]),
 ];
 
 const setPressureBndsBindGroups = [
-  device.createBindGroup({
-    label: "set density boundaries bind group A",
-    layout: scalarBndsBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: pressuresBuffers[0],
-        },
-      },
-    ],
-  }),
-  device.createBindGroup({
-    label: "set velocity boundaries bind group B",
-    layout: vectorBndsBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: pressuresBuffers[1],
-        },
-      },
-    ],
-  }),
+  createScalarBoundsBindGroup(device, gridSizeBuffer, pressuresBuffers[0]),
+  createScalarBoundsBindGroup(device, gridSizeBuffer, pressuresBuffers[1]),
 ];
 
-const setDivergenceBndsBindGroup = device.createBindGroup({
-  label: "set divergence boundaries bind group",
-  layout: scalarBndsBindGroupLayout,
-  entries: [
-    {
-      binding: 0,
-      resource: {
-        buffer: gridSizeBuffer,
-      },
-    },
-    {
-      binding: 1,
-      resource: {
-        buffer: divergenceBuffer,
-      },
-    },
-  ],
-});
+const setDivergenceBndsBindGroup = createScalarBoundsBindGroup(
+  device,
+  gridSizeBuffer,
+  divergenceBuffer
+);
 
-const diffuseDensitiesBindGroup = device.createBindGroup({
-  label: "diffuse density bind group",
-  layout: inOutBindGroupLayout,
-  entries: [
-    {
-      binding: 0,
-      resource: {
-        buffer: gridSizeBuffer,
-      },
-    },
-    {
-      binding: 1,
-      resource: {
-        buffer: densitiesBuffers[0],
-      },
-    },
-    {
-      binding: 2,
-      resource: {
-        buffer: densitiesBuffers[1],
-      },
-    },
-  ],
-});
+const diffuseDensitiesBindGroup = createInOutBindGroup(
+  device,
+  gridSizeBuffer,
+  densitiesBuffers[0],
+  densitiesBuffers[1]
+);
 
-const advectDensitiesBindGroup = device.createBindGroup({
-  label: "advect density bind group",
-  layout: inInOutBindGroupLayout,
-  entries: [
-    {
-      binding: 0,
-      resource: {
-        buffer: gridSizeBuffer,
-      },
-    },
-    {
-      binding: 1,
-      resource: {
-        buffer: velocitiesBuffers[0],
-      },
-    },
-    {
-      binding: 2,
-      resource: {
-        buffer: densitiesBuffers[1],
-      },
-    },
-    {
-      binding: 3,
-      resource: {
-        buffer: densitiesBuffers[0],
-      },
-    },
-  ],
-});
+const advectDensitiesBindGroup = createInInOutBindGroup(
+  device,
+  gridSizeBuffer,
+  velocitiesBuffers[0],
+  densitiesBuffers[1],
+  densitiesBuffers[0]
+);
 
-const divergencesBindGroups = [
-  device.createBindGroup({
-    label: "divergences bind group A",
-    layout: divergencesBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: velocitiesBuffers[0],
-        },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: divergenceBuffer,
-        },
-      },
-      {
-        binding: 3,
-        resource: {
-          buffer: pressuresBuffers[0],
-        },
-      },
-    ],
-  }),
-  device.createBindGroup({
-    label: "divergences bind group B",
-    layout: divergencesBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: velocitiesBuffers[1],
-        },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: divergenceBuffer,
-        },
-      },
-      {
-        binding: 3,
-        resource: {
-          buffer: pressuresBuffers[0],
-        },
-      },
-    ],
-  }),
+const calcDivergenceBindGroups = [
+  createCalcDivergenceBindGroup(
+    device,
+    gridSizeBuffer,
+    velocitiesBuffers[0],
+    divergenceBuffer,
+    pressuresBuffers[0]
+  ),
+  createCalcDivergenceBindGroup(
+    device,
+    gridSizeBuffer,
+    velocitiesBuffers[1],
+    divergenceBuffer,
+    pressuresBuffers[0]
+  ),
 ];
 
 const solvePressureBindGroups = [
-  device.createBindGroup({
-    label: "solve pressures bind group A",
-    layout: solvePressureBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: divergenceBuffer,
-        },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: pressuresBuffers[0],
-        },
-      },
-      {
-        binding: 3,
-        resource: {
-          buffer: pressuresBuffers[1],
-        },
-      },
-    ],
-  }),
-  device.createBindGroup({
-    label: "solve pressures bind group B",
-    layout: solvePressureBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: divergenceBuffer,
-        },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: pressuresBuffers[1],
-        },
-      },
-      {
-        binding: 3,
-        resource: {
-          buffer: pressuresBuffers[0],
-        },
-      },
-    ],
-  }),
+  createSolvePressureBindGroup(
+    device,
+    gridSizeBuffer,
+    divergenceBuffer,
+    pressuresBuffers[0],
+    pressuresBuffers[1]
+  ),
+  createSolvePressureBindGroup(
+    device,
+    gridSizeBuffer,
+    divergenceBuffer,
+    pressuresBuffers[1],
+    pressuresBuffers[0]
+  ),
 ];
 
 const projectVelocitiesBindGroups = [
-  device.createBindGroup({
-    label: "project velocities bind group A",
-    layout: projectVelocitiesBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: pressuresBuffers[0],
-        },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: velocitiesBuffers[0],
-        },
-      },
-    ],
-  }),
-  device.createBindGroup({
-    label: "project velocities bind group A",
-    layout: projectVelocitiesBindGroupLayout,
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: gridSizeBuffer,
-        },
-      },
-      {
-        binding: 1,
-        resource: {
-          buffer: pressuresBuffers[0],
-        },
-      },
-      {
-        binding: 2,
-        resource: {
-          buffer: velocitiesBuffers[1],
-        },
-      },
-    ],
-  }),
+  createProjectVelocityBindGroup(
+    device,
+    gridSizeBuffer,
+    pressuresBuffers[0],
+    velocitiesBuffers[0]
+  ),
+  createProjectVelocityBindGroup(
+    device,
+    gridSizeBuffer,
+    pressuresBuffers[0],
+    velocitiesBuffers[1]
+  ),
 ];
 
 const renderBindGroup = device.createBindGroup({
@@ -878,97 +233,16 @@ const renderBindGroup = device.createBindGroup({
   ],
 });
 
-const sourcePipeline = device.createComputePipeline({
-  layout: device.createPipelineLayout({
-    bindGroupLayouts: [sourceBindGroupLayout],
-  }),
-  compute: {
-    module: sourceShdrMdl,
-    entryPoint: "computeMain",
-  },
-});
-
-const diffuseVelocityPipeline = device.createComputePipeline({
-  layout: device.createPipelineLayout({
-    bindGroupLayouts: [inOutBindGroupLayout],
-  }),
-  compute: {
-    module: diffuseVelShdrMdl,
-    entryPoint: "computeMain",
-  },
-});
-const advectVelocityPipeline = device.createComputePipeline({
-  layout: device.createPipelineLayout({
-    bindGroupLayouts: [inOutBindGroupLayout],
-  }),
-  compute: {
-    module: advectVelShdrMdl,
-    entryPoint: "computeMain",
-  },
-});
-const divergencesPipeline = device.createComputePipeline({
-  layout: device.createPipelineLayout({
-    bindGroupLayouts: [divergencesBindGroupLayout],
-  }),
-  compute: {
-    module: calcDivergenceShdrMdl,
-    entryPoint: "computeMain",
-  },
-});
-const solvePressuresPipeline = device.createComputePipeline({
-  layout: device.createPipelineLayout({
-    bindGroupLayouts: [solvePressureBindGroupLayout],
-  }),
-  compute: {
-    module: solvePressureShdrMdl,
-    entryPoint: "computeMain",
-  },
-});
-const projectVelocitiesPipeline = device.createComputePipeline({
-  layout: device.createPipelineLayout({
-    bindGroupLayouts: [projectVelocitiesBindGroupLayout],
-  }),
-  compute: {
-    module: projectVelShdrMdl,
-    entryPoint: "computeMain",
-  },
-});
-const diffuseDensityPipeline = device.createComputePipeline({
-  layout: device.createPipelineLayout({
-    bindGroupLayouts: [inOutBindGroupLayout],
-  }),
-  compute: {
-    module: diffuseDensShdrMdl,
-    entryPoint: "computeMain",
-  },
-});
-const advectDensityPipeline = device.createComputePipeline({
-  layout: device.createPipelineLayout({
-    bindGroupLayouts: [inInOutBindGroupLayout],
-  }),
-  compute: {
-    module: advectDensShdrMdl,
-    entryPoint: "computeMain",
-  },
-});
-const vectorBoundaryPipeline = device.createComputePipeline({
-  layout: device.createPipelineLayout({
-    bindGroupLayouts: [vectorBndsBindGroupLayout],
-  }),
-  compute: {
-    module: vecBndsShdrMdl,
-    entryPoint: "computeMain",
-  },
-});
-const scalarBoundaryPipeline = device.createComputePipeline({
-  layout: device.createPipelineLayout({
-    bindGroupLayouts: [scalarBndsBindGroupLayout],
-  }),
-  compute: {
-    module: scalarBndsShdrMdl,
-    entryPoint: "computeMain",
-  },
-});
+const sourcePipeline = createSourcesPipeline(device);
+const diffuseVelocityPipeline = createDiffuseVelocityPipeline(device);
+const advectVelocityPipeline = createAdvectVelocityPipeline(device);
+const calcDivergencePipeline = createCalcDivergencePipeline(device);
+const solvePressurePipeline = createSolvePressurePipeline(device);
+const projectVelocityPipeline = createProjectVelocityPipeline(device);
+const diffuseDensityPipeline = createDiffuseDensityPipeline(device);
+const advectDensityPipeline = createAdvectDensityPipeline(device);
+const vectorBoundaryPipeline = createVectorBoundsPipeline(device);
+const scalarBoundaryPipeline = createScalarBoundsPipeline(device);
 
 let lastPointer = { x: -1, y: -1 };
 let currentPointer = { x: -1, y: -1 };
@@ -994,61 +268,112 @@ canvas.addEventListener("pointermove", (e) => {
   currentPointer = { x: mouseX, y: mouseY };
 });
 
+const executeComputePass = (
+  encoder: GPUCommandEncoder,
+  pipeline: GPUComputePipeline,
+  bindGroup: GPUBindGroup,
+  workgroupsX: number,
+  workgroupsY: number
+) => {
+  const pass = encoder.beginComputePass();
+  pass.setPipeline(pipeline);
+  pass.setBindGroup(0, bindGroup);
+  pass.dispatchWorkgroups(workgroupsX, workgroupsY);
+  pass.end();
+};
+
+const executeRenderPass = (encoder: GPUCommandEncoder) => {
+  const renderPass = encoder.beginRenderPass({
+    colorAttachments: [
+      {
+        view: context.getCurrentTexture().createView(),
+        loadOp: "clear",
+        storeOp: "store",
+        clearValue: { r: 1, g: 1, b: 1, a: 1 },
+      },
+    ],
+  });
+
+  renderPass.setPipeline(renderPipeline);
+  renderPass.setBindGroup(0, renderBindGroup);
+  renderPass.draw(3); // using fullscreen triangle
+  renderPass.end();
+};
+
 const projectVelocities = (encoder: GPUCommandEncoder) => {
-  let pass = encoder.beginComputePass();
-  pass.setPipeline(divergencesPipeline);
-  pass.setBindGroup(0, divergencesBindGroups[1]);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
+  executeComputePass(
+    encoder,
+    calcDivergencePipeline,
+    calcDivergenceBindGroups[1],
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
 
-  pass = encoder.beginComputePass();
-  pass.setPipeline(scalarBoundaryPipeline);
-  pass.setBindGroup(0, setDivergenceBndsBindGroup);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
+  executeComputePass(
+    encoder,
+    scalarBoundaryPipeline,
+    setDivergenceBndsBindGroup,
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
 
-  pass = encoder.beginComputePass();
-  pass.setPipeline(scalarBoundaryPipeline);
-  pass.setBindGroup(0, setPressureBndsBindGroups[0]);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
+  executeComputePass(
+    encoder,
+    scalarBoundaryPipeline,
+    setPressureBndsBindGroups[0],
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
 
   for (let i = 0; i < 10; i++) {
-    pass = encoder.beginComputePass();
-    pass.setPipeline(solvePressuresPipeline);
-    pass.setBindGroup(0, solvePressureBindGroups[0]);
-    pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-    pass.end();
+    executeComputePass(
+      encoder,
+      solvePressurePipeline,
+      solvePressureBindGroups[0],
+      Math.ceil(gridX / 16),
+      Math.ceil(gridY / 16)
+    );
 
-    pass = encoder.beginComputePass();
-    pass.setPipeline(scalarBoundaryPipeline);
-    pass.setBindGroup(0, setPressureBndsBindGroups[1]);
-    pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-    pass.end();
+    executeComputePass(
+      encoder,
+      scalarBoundaryPipeline,
+      setPressureBndsBindGroups[1],
+      Math.ceil(gridX / 16),
+      Math.ceil(gridY / 16)
+    );
 
-    pass = encoder.beginComputePass();
-    pass.setPipeline(solvePressuresPipeline);
-    pass.setBindGroup(0, solvePressureBindGroups[1]);
-    pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-    pass.end();
+    executeComputePass(
+      encoder,
+      solvePressurePipeline,
+      solvePressureBindGroups[1],
+      Math.ceil(gridX / 16),
+      Math.ceil(gridY / 16)
+    );
 
-    pass = encoder.beginComputePass();
-    pass.setPipeline(scalarBoundaryPipeline);
-    pass.setBindGroup(0, setPressureBndsBindGroups[0]);
-    pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-    pass.end();
+    executeComputePass(
+      encoder,
+      scalarBoundaryPipeline,
+      setPressureBndsBindGroups[0],
+      Math.ceil(gridX / 16),
+      Math.ceil(gridY / 16)
+    );
   }
-  pass = encoder.beginComputePass();
-  pass.setPipeline(projectVelocitiesPipeline);
-  pass.setBindGroup(0, projectVelocitiesBindGroups[1]);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
 
-  pass = encoder.beginComputePass();
-  pass.setPipeline(vectorBoundaryPipeline);
-  pass.setBindGroup(0, setVelocityBndsBindGroups[1]);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
+  executeComputePass(
+    encoder,
+    projectVelocityPipeline,
+    projectVelocitiesBindGroups[1],
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
+
+  executeComputePass(
+    encoder,
+    vectorBoundaryPipeline,
+    setVelocityBndsBindGroups[1],
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
 };
 
 const simulationLoop = () => {
@@ -1089,75 +414,75 @@ const simulationLoop = () => {
     sourcePass.dispatchWorkgroups(Math.ceil(cells.length / 256));
     sourcePass.end();
   }
-  let pass = encoder.beginComputePass();
-  pass.setPipeline(diffuseVelocityPipeline);
-  pass.setBindGroup(0, velocityBindGroups[0]);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
+  executeComputePass(
+    encoder,
+    diffuseVelocityPipeline,
+    velocityBindGroups[0],
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
 
-  pass = encoder.beginComputePass();
-  pass.setPipeline(vectorBoundaryPipeline);
-  pass.setBindGroup(0, setVelocityBndsBindGroups[1]);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
-
-  projectVelocities(encoder);
-
-  pass = encoder.beginComputePass();
-  pass.setPipeline(advectVelocityPipeline);
-  pass.setBindGroup(0, velocityBindGroups[1]);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
-
-  pass = encoder.beginComputePass();
-  pass.setPipeline(vectorBoundaryPipeline);
-  pass.setBindGroup(0, setVelocityBndsBindGroups[0]);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
+  executeComputePass(
+    encoder,
+    vectorBoundaryPipeline,
+    setVelocityBndsBindGroups[1],
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
 
   projectVelocities(encoder);
 
-  pass = encoder.beginComputePass();
-  pass.setPipeline(diffuseDensityPipeline);
-  pass.setBindGroup(0, diffuseDensitiesBindGroup);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
+  executeComputePass(
+    encoder,
+    advectVelocityPipeline,
+    velocityBindGroups[1],
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
 
-  pass = encoder.beginComputePass();
-  pass.setPipeline(scalarBoundaryPipeline);
-  pass.setBindGroup(0, setDensityBndsBindGroups[1]);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
+  executeComputePass(
+    encoder,
+    vectorBoundaryPipeline,
+    setVelocityBndsBindGroups[0],
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
 
-  pass = encoder.beginComputePass();
-  pass.setPipeline(advectDensityPipeline);
-  pass.setBindGroup(0, advectDensitiesBindGroup);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
+  projectVelocities(encoder);
 
-  pass = encoder.beginComputePass();
-  pass.setPipeline(scalarBoundaryPipeline);
-  pass.setBindGroup(0, setDensityBndsBindGroups[0]);
-  pass.dispatchWorkgroups(Math.ceil(gridX / 16), Math.ceil(gridY / 16));
-  pass.end();
+  executeComputePass(
+    encoder,
+    diffuseDensityPipeline,
+    diffuseDensitiesBindGroup,
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
 
-  const renderPass = encoder.beginRenderPass({
-    colorAttachments: [
-      {
-        view: context.getCurrentTexture().createView(),
-        loadOp: "clear",
-        storeOp: "store",
-        clearValue: { r: 1, g: 1, b: 1, a: 1 },
-      },
-    ],
-  });
+  executeComputePass(
+    encoder,
+    scalarBoundaryPipeline,
+    setDensityBndsBindGroups[1],
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
 
-  renderPass.setPipeline(renderPipeline);
-  renderPass.setBindGroup(0, renderBindGroup);
-  renderPass.draw(3); // using fullscreen triangle
-  renderPass.end();
+  executeComputePass(
+    encoder,
+    advectDensityPipeline,
+    advectDensitiesBindGroup,
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
+
+  executeComputePass(
+    encoder,
+    scalarBoundaryPipeline,
+    setDensityBndsBindGroups[0],
+    Math.ceil(gridX / 16),
+    Math.ceil(gridY / 16)
+  );
+  executeRenderPass(encoder);
   device.queue.submit([encoder.finish()]);
-  // pingPongState = !pingPongState;
   requestAnimationFrame(simulationLoop);
 };
 
