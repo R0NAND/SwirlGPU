@@ -1,3 +1,42 @@
 body {
   margin: 0;
 }
+
+h1 {
+  color: azure;
+}
+
+p {
+  color: azure;
+}
+.main-div {
+  background-color: #1f1f1f;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+canvas {
+  border: 1px solid azure;
+}
+
+@media only screen and (max-width: 600px) {
+  canvas {
+    width: 80%;
+    aspect-ratio: 1/1;
+  }
+}
+
+@media only screen and (min-width: 600px) {
+  canvas {
+    height: 60%;
+  }
+}
+
+@media only screen and (min-width: 1000px) {
+  canvas {
+    height: 80%;
+  }
+}

@@ -1,5 +1,5 @@
 const diff: f32 = 0.3;
-const visc: f32 = 3.0;
+const visc: f32 = 5.0;
 const dt: f32 = 0.01666667;
 @group(0) @binding(0) var<uniform> grid_size: vec2<u32>;
 @group(0) @binding(1) var<storage> velocities_in: array<vec2<f32>>;

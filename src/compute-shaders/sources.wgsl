@@ -15,9 +15,10 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
   if(global_id.x >= n_sources) {
     return;
   }
+  if(sources[global_id.x].cell.x < 0 || sources[global_id.x].cell.x >= grid_size.x){
+    return;
+  }
   let index: u32 = sources[global_id.x].cell.x + grid_size.x * sources[global_id.x].cell.y;
   densities[index] = sources[global_id.x].density * 1; 
   velocities[index] += sources[global_id.x].velocity;
 }
-  //densities[global_id.x] = 10.0;
-  //densities[101+global_id.x] = 10.0;
