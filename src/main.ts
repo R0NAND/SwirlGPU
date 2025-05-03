@@ -244,26 +244,26 @@ const renderBindGroup = device.createBindGroup({
 let lastPointer = { x: -1, y: -1 };
 let currentPointer = { x: -1, y: -1 };
 let isPointerActive = false;
+canvas.style.touchAction = "none";
 
-canvas.addEventListener("pointerdown", (e) => {
-  isPointerActive = true;
-  currentPointer = { x: e.offsetX, y: e.offsetY };
-  canvas.setPointerCapture(e.pointerId); // Captures pointer during drag
-});
-
-canvas.addEventListener("pointerup", (e) => {
-  isPointerActive = false;
-  canvas.releasePointerCapture(e.pointerId);
-});
-
-canvas.addEventListener("pointermove", (e) => {
-  if (currentPointer.x < 0) return;
-
+const pointerMoveEvent = (e: PointerEvent) => {
   const mouseX = e.offsetX;
   const mouseY = e.offsetY;
 
   lastPointer = currentPointer;
   currentPointer = { x: mouseX, y: mouseY };
+  isPointerActive = true;
+};
+
+canvas.addEventListener("pointerdown", (e) => {
+  currentPointer = { x: e.offsetX, y: e.offsetY };
+  canvas.setPointerCapture(e.pointerId); // Captures pointer during drag
+  canvas.addEventListener("pointermove", pointerMoveEvent);
+});
+
+canvas.addEventListener("pointerup", (e) => {
+  canvas.releasePointerCapture(e.pointerId);
+  canvas.removeEventListener("pointermove", pointerMoveEvent);
 });
 
 const executeComputePass = (
@@ -408,6 +408,7 @@ const simulationLoop = () => {
     sourcePass.setBindGroup(0, sourceBindGroup);
     sourcePass.dispatchWorkgroups(Math.ceil(cells.length / 256));
     sourcePass.end();
+    isPointerActive = false;
   }
   executeComputePass(
     encoder,
