@@ -13,9 +13,7 @@ export const rasterizeLine = (
   y0: number,
   x1: number,
   y1: number,
-  radius: number,
-  maxX?: number,
-  maxY?: number
+  radius: number
 ): Point[] => {
   const points = new Set<string>();
 
