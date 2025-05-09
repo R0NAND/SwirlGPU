@@ -18,8 +18,8 @@ import { createSolvePressurePipeline } from "./pipelines/solve-pressure";
 import { createSimParamsBindGroup } from "./bind-groups/sim-params-group";
 import { BooleanState } from "./BooleanState";
 
-const gridX = 300;
-const gridY = 300;
+const gridX = 400;
+const gridY = 400;
 const groupSize = 16;
 
 const canvas = document.getElementById("simulationCanvas") as HTMLCanvasElement;
