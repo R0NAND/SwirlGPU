@@ -3,22 +3,16 @@ export const createInOutBindGroupLayout = (device: GPUDevice) => {
     label: "in-out bind group layout",
     entries: [
       {
-        //grid_size
-        binding: 0,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {},
-      },
-      {
         // field data in
-        binding: 1,
-        visibility: GPUShaderStage.COMPUTE,
+        binding: 0,
+        visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: {
           type: "read-only-storage",
         },
       },
       {
         // field data out
-        binding: 2,
+        binding: 1,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "storage",

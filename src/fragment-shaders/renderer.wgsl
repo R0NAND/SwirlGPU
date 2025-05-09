@@ -1,8 +1,7 @@
-@group(0) @binding(0)
-var<uniform> grid_size: vec2<u32>; // e.g., 100x100
+@group(0) @binding(0) var<uniform> grid_size: vec2<u32>;
 
-@group(0) @binding(1)
-var<storage, read> densities: array<f32>;
+@group(1) @binding(0)
+var<storage> densities: array<f32>;
 
 @fragment fn main(@builtin(position) cell: vec4f) -> @location(0) vec4f {
   let coord = vec2<u32>(cell.xy);

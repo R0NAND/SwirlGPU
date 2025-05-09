@@ -3,7 +3,7 @@ export const createSourcesBindGroupLayout = (device: GPUDevice) => {
     label: "sources bind group layout",
     entries: [
       {
-        //grid_size
+        // number of source cells
         binding: 0,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
@@ -11,35 +11,11 @@ export const createSourcesBindGroupLayout = (device: GPUDevice) => {
         },
       },
       {
-        // number of source cells
+        // sources list in struct form. See sources.wgsl for details.
         binding: 1,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
-          type: "uniform",
-        },
-      },
-      {
-        // sources list in struct form. See sources.wgsl for details.
-        binding: 2,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
           type: "read-only-storage",
-        },
-      },
-      {
-        // velocities out
-        binding: 3,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
-          type: "storage",
-        },
-      },
-      {
-        // densities out
-        binding: 4,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
-          type: "storage",
         },
       },
     ],

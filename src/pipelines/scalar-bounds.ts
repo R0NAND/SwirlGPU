@@ -1,10 +1,15 @@
 import scalarBoundsShader from "../compute-shaders/scalar-bounds.wgsl";
-import { createScalarBoundsBindGroupLayout } from "../bind-group-layouts/scalar-bounds-layout";
+import { createSimParamsBindGroupLayout } from "../bind-group-layouts/sim-params-layout";
+import { createBufferBindGroupLayout } from "../bind-group-layouts/buffer-layout";
 
 export const createScalarBoundsPipeline = (device: GPUDevice) => {
   return device.createComputePipeline({
+    label: "scalar bounds pipeline",
     layout: device.createPipelineLayout({
-      bindGroupLayouts: [createScalarBoundsBindGroupLayout(device)],
+      bindGroupLayouts: [
+        createSimParamsBindGroupLayout(device),
+        createBufferBindGroupLayout(device),
+      ],
     }),
     compute: {
       module: device.createShaderModule({

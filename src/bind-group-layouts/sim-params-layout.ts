@@ -5,7 +5,7 @@ export const createSimParamsBindGroupLayout = (device: GPUDevice) => {
       {
         //grid_size
         binding: 0,
-        visibility: GPUShaderStage.COMPUTE,
+        visibility: GPUShaderStage.COMPUTE | GPUShaderStage.FRAGMENT,
         buffer: {},
       },
       {
@@ -23,6 +23,12 @@ export const createSimParamsBindGroupLayout = (device: GPUDevice) => {
       {
         //diffusivity
         binding: 3,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: {},
+      },
+      {
+        //decay
+        binding: 4,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {},
       },

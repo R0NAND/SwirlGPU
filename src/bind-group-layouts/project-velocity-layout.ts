@@ -3,16 +3,8 @@ export const createProjectVelocityBindGroupLayout = (device: GPUDevice) => {
     label: "project velocity bind group layout",
     entries: [
       {
-        //grid_size
-        binding: 0,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
-          type: "uniform",
-        },
-      },
-      {
         // pressures
-        binding: 1,
+        binding: 0,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "read-only-storage",
@@ -20,7 +12,7 @@ export const createProjectVelocityBindGroupLayout = (device: GPUDevice) => {
       },
       {
         // velocities
-        binding: 2,
+        binding: 1,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "storage",

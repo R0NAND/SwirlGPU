@@ -3,16 +3,8 @@ export const createSolvePressureBindGroupLayout = (device: GPUDevice) => {
     label: "solve pressure bind group layout",
     entries: [
       {
-        //grid_size
-        binding: 0,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
-          type: "uniform",
-        },
-      },
-      {
         // divergences
-        binding: 1,
+        binding: 0,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "read-only-storage",
@@ -20,7 +12,7 @@ export const createSolvePressureBindGroupLayout = (device: GPUDevice) => {
       },
       {
         // pressures in
-        binding: 2,
+        binding: 1,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "read-only-storage",
@@ -28,7 +20,7 @@ export const createSolvePressureBindGroupLayout = (device: GPUDevice) => {
       },
       {
         // pressures out
-        binding: 3,
+        binding: 2,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "storage",

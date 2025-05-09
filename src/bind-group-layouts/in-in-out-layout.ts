@@ -3,14 +3,8 @@ export const createInInOutBindGroupLayout = (device: GPUDevice) => {
     label: "in-in-out bind group layout",
     entries: [
       {
-        // grid_size
-        binding: 0,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {},
-      },
-      {
         // field data 1 in
-        binding: 1,
+        binding: 0,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "read-only-storage",
@@ -18,7 +12,7 @@ export const createInInOutBindGroupLayout = (device: GPUDevice) => {
       },
       {
         // field data 2 in
-        binding: 2,
+        binding: 1,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "read-only-storage",
@@ -26,7 +20,7 @@ export const createInInOutBindGroupLayout = (device: GPUDevice) => {
       },
       {
         // field data out
-        binding: 3,
+        binding: 2,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "storage",

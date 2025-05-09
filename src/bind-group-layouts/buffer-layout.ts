@@ -1,9 +1,9 @@
-export const createVectorBoundsBindGroupLayout = (device: GPUDevice) => {
+export const createBufferBindGroupLayout = (device: GPUDevice) => {
   return device.createBindGroupLayout({
-    label: "vector bounds bind group layout",
+    label: "buffer bind group layout",
     entries: [
       {
-        // vectors
+        // field data
         binding: 0,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {

@@ -3,16 +3,8 @@ export const createCalcDivergenceBindGroupLayout = (device: GPUDevice) => {
     label: "calc divergence bind group layout",
     entries: [
       {
-        // grid_size
-        binding: 0,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: {
-          type: "uniform",
-        },
-      },
-      {
         // velocities
-        binding: 1,
+        binding: 0,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "read-only-storage",
@@ -20,7 +12,7 @@ export const createCalcDivergenceBindGroupLayout = (device: GPUDevice) => {
       },
       {
         // divergences
-        binding: 2,
+        binding: 1,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "storage",
@@ -28,7 +20,7 @@ export const createCalcDivergenceBindGroupLayout = (device: GPUDevice) => {
       },
       {
         // pressures
-        binding: 3,
+        binding: 2,
         visibility: GPUShaderStage.COMPUTE,
         buffer: {
           type: "storage",

@@ -2,11 +2,8 @@ import { createSourcesBindGroupLayout } from "../bind-group-layouts/sources-layo
 
 export const createSourcesBindGroup = (
   device: GPUDevice,
-  dimension: GPUBuffer,
   sourceCount: GPUBuffer,
-  sources: GPUBuffer,
-  velocityOut: GPUBuffer,
-  densityOut: GPUBuffer
+  sources: GPUBuffer
 ) => {
   return device.createBindGroup({
     layout: createSourcesBindGroupLayout(device),
@@ -14,31 +11,13 @@ export const createSourcesBindGroup = (
       {
         binding: 0,
         resource: {
-          buffer: dimension,
+          buffer: sourceCount,
         },
       },
       {
         binding: 1,
         resource: {
-          buffer: sourceCount,
-        },
-      },
-      {
-        binding: 2,
-        resource: {
           buffer: sources,
-        },
-      },
-      {
-        binding: 3,
-        resource: {
-          buffer: velocityOut,
-        },
-      },
-      {
-        binding: 4,
-        resource: {
-          buffer: densityOut,
         },
       },
     ],
